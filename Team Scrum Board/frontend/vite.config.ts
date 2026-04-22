@@ -13,4 +13,7 @@ export default defineConfig({
       "/uploads": "http://localhost:4000",
     },
   },
+  preview: {
+    allowedHosts: true,
+  },
 });
