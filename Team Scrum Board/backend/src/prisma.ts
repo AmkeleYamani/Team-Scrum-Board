@@ -1,9 +1,8 @@
-import path from "path";
+import { Pool } from "pg";
+import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
-import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
 
-const dbPath = path.join(__dirname, "../prisma/dev.db");
-const adapter = new PrismaBetterSqlite3({ url: `file:${dbPath}` });
+const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+const adapter = new PrismaPg(pool);
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const prisma = new PrismaClient({ adapter } as any);
