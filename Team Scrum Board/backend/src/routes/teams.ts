@@ -77,18 +77,40 @@ router.patch("/:teamId", async (req: AuthRequest, res) => {
 
   const collaborators = Array.isArray(memberEmails) ? memberEmails.filter(Boolean) : [];
   const users = await prisma.user.findMany({ where: { email: { in: collaborators } } });
-  const uniqueMemberIds = Array.from(new Set([...users.map((u) => u.id), userId]));
+  const uniqueMemberIds = [...new Set([...users.map((u) => u.id), userId])];
 
-  await prisma.teamMembership.deleteMany({ where: { teamId } });
-
-  const updated = await prisma.team.update({
-    where: { id: teamId },
-    data: {
-      name,
-      members: { create: uniqueMemberIds.map((id) => ({ userId: id })) },
-    },
-    include: teamInclude,
+  const updated = await prisma.$transaction(async (tx) => {
+    await tx.teamMembership.deleteMany({ where: { teamId } });
+    await tx.teamMembership.createMany({
+      data: uniqueMemberIds.map((uid) => ({ teamId, userId: uid })),
+    });
+    return tx.team.update({ where: { id: teamId }, data: { name }, include: teamInclude });
   });
+
+  return res.json(updated);
+});
+
+// POST /api/teams/:teamId/members — add a single member by email (creator only)
+router.post("/:teamId/members", async (req: AuthRequest, res) => {
+  const userId = req.userId!;
+  const { teamId } = req.params;
+  const { email } = req.body;
+
+  if (!email) return res.status(400).json({ message: "Email is required." });
+
+  const team = await prisma.team.findUnique({ where: { id: teamId } });
+  if (!team) return res.status(404).json({ message: "Team not found." });
+  if (team.createdById !== userId) return res.status(403).json({ message: "Only the team creator can add members." });
+
+  const userToAdd = await prisma.user.findUnique({ where: { email: email.trim() } });
+  if (!userToAdd) return res.status(404).json({ message: "No registered user found with that email." });
+
+  const existing = await prisma.teamMembership.findFirst({ where: { teamId, userId: userToAdd.id } });
+  if (existing) return res.status(409).json({ message: "User is already a team member." });
+
+  await prisma.teamMembership.create({ data: { teamId, userId: userToAdd.id } });
+
+  const updated = await prisma.team.findUnique({ where: { id: teamId }, include: teamInclude });
   return res.json(updated);
 });
 

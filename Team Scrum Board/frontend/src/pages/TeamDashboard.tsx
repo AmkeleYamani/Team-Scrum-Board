@@ -16,6 +16,11 @@ function TeamDashboard() {
   const [teamMemberEmails, setTeamMemberEmails] = useState("");
   const [deletingTeam, setDeletingTeam] = useState(false);
 
+  // Add member
+  const [addMemberEmail, setAddMemberEmail] = useState("");
+  const [addMemberError, setAddMemberError] = useState("");
+  const [addMemberSuccess, setAddMemberSuccess] = useState("");
+
   // Project creation / editing
   const [projectName, setProjectName] = useState("");
   const [projectDescription, setProjectDescription] = useState("");
@@ -35,6 +40,22 @@ function TeamDashboard() {
       setTeam(res.data);
     } catch {
       setError("Unable to load team.");
+    }
+  }
+
+  // ── Add member ───────────────────────────────────────────────────────────
+
+  async function handleAddMember(e: React.FormEvent) {
+    e.preventDefault();
+    setAddMemberError("");
+    setAddMemberSuccess("");
+    try {
+      const res = await api.post<Team>(`/teams/${teamId}/members`, { email: addMemberEmail.trim() });
+      setTeam(res.data);
+      setAddMemberEmail("");
+      setAddMemberSuccess("Member added successfully.");
+    } catch (err: any) {
+      setAddMemberError(err?.response?.data?.message || "Unable to add member.");
     }
   }
 
@@ -213,6 +234,22 @@ function TeamDashboard() {
                   </span>
                 ))}
               </div>
+              {isTeamCreator ? (
+                <form className="mt-4 flex gap-2" onSubmit={handleAddMember}>
+                  <input
+                    type="email"
+                    value={addMemberEmail}
+                    onChange={(e) => setAddMemberEmail(e.target.value)}
+                    placeholder="Add member by email"
+                    className="flex-1 rounded border border-slate-300 bg-slate-50 px-3 py-2 text-sm focus:border-slate-900 focus:outline-none"
+                  />
+                  <button type="submit" className="rounded bg-slate-900 px-4 py-2 text-sm text-white hover:bg-slate-700">
+                    Add
+                  </button>
+                </form>
+              ) : null}
+              {addMemberError ? <p className="mt-1 text-xs text-red-600">{addMemberError}</p> : null}
+              {addMemberSuccess ? <p className="mt-1 text-xs text-green-600">{addMemberSuccess}</p> : null}
             </div>
             {isTeamCreator ? (
               <div className="flex shrink-0 gap-2">
