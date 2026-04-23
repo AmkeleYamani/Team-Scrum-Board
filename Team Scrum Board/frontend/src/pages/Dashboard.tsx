@@ -208,7 +208,7 @@ function Dashboard() {
           onClick={() => setSearchParams({ tab: "teams" })}
           className={`rounded-lg px-5 py-2 text-sm font-medium transition ${activeTab === "teams" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
         >
-          My Teams
+          My Team Projects
         </button>
       </div>
 

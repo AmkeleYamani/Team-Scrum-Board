@@ -1,4 +1,5 @@
 import express from "express";
+import { Prisma } from "@prisma/client";
 import { prisma } from "../prisma";
 import { AuthRequest } from "../middleware/auth";
 
@@ -9,6 +10,15 @@ const projectInclude = {
   members: { include: { user: { select: { id: true, name: true, email: true } } } },
   tasks: true,
 } as const;
+
+async function findUserIdsByEmails(emails: string[]): Promise<string[]> {
+  if (emails.length === 0) return [];
+  const lowerEmails = emails.map((e) => e.trim().toLowerCase());
+  const users = await prisma.$queryRaw<{ id: string }[]>`
+    SELECT id FROM "User" WHERE LOWER(email) IN (${Prisma.join(lowerEmails)})
+  `;
+  return users.map((u) => u.id);
+}
 
 // GET /api/projects — personal projects only
 router.get("/", async (req: AuthRequest, res) => {
@@ -32,8 +42,8 @@ router.post("/", async (req: AuthRequest, res) => {
   if (!name) return res.status(400).json({ message: "Project name is required." });
 
   const collaborators = Array.isArray(memberEmails) ? memberEmails.filter(Boolean) : [];
-  const users = await prisma.user.findMany({ where: { email: { in: collaborators } } });
-  const uniqueMemberIds = Array.from(new Set([...users.map((u) => u.id), userId]));
+  const collaboratorIds = await findUserIdsByEmails(collaborators);
+  const uniqueMemberIds = Array.from(new Set([...collaboratorIds, userId]));
 
   const project = await prisma.project.create({
     data: {
@@ -97,8 +107,8 @@ router.patch("/:projectId", async (req: AuthRequest, res) => {
   if (project.createdById !== userId) return res.status(403).json({ message: "Only the project creator can edit it." });
 
   const collaborators = Array.isArray(memberEmails) ? memberEmails.filter(Boolean) : [];
-  const users = await prisma.user.findMany({ where: { email: { in: collaborators } } });
-  const uniqueMemberIds = Array.from(new Set([...users.map((u) => u.id), userId]));
+  const collaboratorIds = await findUserIdsByEmails(collaborators);
+  const uniqueMemberIds = Array.from(new Set([...collaboratorIds, userId]));
 
   await prisma.projectMembership.deleteMany({ where: { projectId } });
 

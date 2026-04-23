@@ -12,17 +12,19 @@ router.post("/register", async (req, res) => {
     return res.status(400).json({ message: "Email and password are required." });
   }
 
-  const normalizedEmail = email.trim().toLowerCase();
-  const existingUser = await prisma.user.findUnique({ where: { email: normalizedEmail } });
-  if (existingUser) {
+  const trimmedEmail = email.trim();
+  const existing = await prisma.$queryRaw<{ id: string }[]>`
+    SELECT id FROM "User" WHERE LOWER(email) = LOWER(${trimmedEmail}) LIMIT 1
+  `;
+  if (existing.length > 0) {
     return res.status(409).json({ message: "Email already registered." });
   }
 
   const hashedPassword = await bcrypt.hash(password, 10);
   const user = await prisma.user.create({
     data: {
-      name: name || normalizedEmail,
-      email: normalizedEmail,
+      name: name || trimmedEmail,
+      email: trimmedEmail,
       password: hashedPassword,
     },
   });
@@ -42,7 +44,10 @@ router.post("/login", async (req, res) => {
     return res.status(400).json({ message: "Email and password are required." });
   }
 
-  const user = await prisma.user.findUnique({ where: { email: email.trim().toLowerCase() } });
+  const result = await prisma.$queryRaw<{ id: string; name: string; email: string; password: string }[]>`
+    SELECT id, name, email, password FROM "User" WHERE LOWER(email) = LOWER(${email.trim()}) LIMIT 1
+  `;
+  const user = result[0] ?? null;
   if (!user) {
     return res.status(401).json({ message: "Invalid credentials." });
   }
@@ -65,15 +70,17 @@ router.patch("/profile", authenticateToken, async (req: AuthRequest, res) => {
 
   if (!email) return res.status(400).json({ message: "Email is required." });
 
-  const normalizedEmail = email.trim().toLowerCase();
-  const existing = await prisma.user.findUnique({ where: { email: normalizedEmail } });
-  if (existing && existing.id !== userId) {
+  const trimmedEmail = email.trim();
+  const existing = await prisma.$queryRaw<{ id: string }[]>`
+    SELECT id FROM "User" WHERE LOWER(email) = LOWER(${trimmedEmail}) LIMIT 1
+  `;
+  if (existing.length > 0 && existing[0].id !== userId) {
     return res.status(409).json({ message: "Email already in use." });
   }
 
   const updated = await prisma.user.update({
     where: { id: userId },
-    data: { email: normalizedEmail, ...(name !== undefined && { name }) },
+    data: { email: trimmedEmail, ...(name !== undefined && { name }) },
     select: { id: true, name: true, email: true },
   });
 
@@ -106,7 +113,6 @@ router.delete("/account", authenticateToken, async (req: AuthRequest, res) => {
   const userId = req.userId!;
   try {
     await prisma.$transaction(async (tx) => {
-      // Collect all project IDs this user owns (personal + in owned teams)
       const ownedProjects = await tx.project.findMany({ where: { createdById: userId }, select: { id: true } });
       const ownedProjectIds = ownedProjects.map((p) => p.id);
 
@@ -118,13 +124,9 @@ router.delete("/account", authenticateToken, async (req: AuthRequest, res) => {
         : [];
       const allOwnedProjectIds = [...new Set([...ownedProjectIds, ...teamProjects.map((p) => p.id)])];
 
-      // 1. Nullify task assignments to this user
       await tx.task.updateMany({ where: { assignedToId: userId }, data: { assignedToId: null } });
-
-      // 2. Delete CommentMentions that mention this user
       await tx.commentMention.deleteMany({ where: { userId } });
 
-      // 3. Explicitly delete comments authored by this user (leaf-to-root, no cascade reliance)
       const userComments = await tx.comment.findMany({ where: { authorId: userId }, select: { id: true } });
       if (userComments.length) {
         const ids = userComments.map((c) => c.id);
@@ -133,7 +135,6 @@ router.delete("/account", authenticateToken, async (req: AuthRequest, res) => {
         await tx.comment.deleteMany({ where: { id: { in: ids } } });
       }
 
-      // 4. Delete all content inside owned projects (and team projects)
       if (allOwnedProjectIds.length) {
         const tasks = await tx.task.findMany({ where: { projectId: { in: allOwnedProjectIds } }, select: { id: true } });
         const taskIds = tasks.map((t) => t.id);
@@ -153,17 +154,13 @@ router.delete("/account", authenticateToken, async (req: AuthRequest, res) => {
         await tx.project.deleteMany({ where: { id: { in: allOwnedProjectIds } } });
       }
 
-      // 5. Delete team memberships and owned teams
       if (ownedTeamIds.length) {
         await tx.teamMembership.deleteMany({ where: { teamId: { in: ownedTeamIds } } });
         await tx.team.deleteMany({ where: { id: { in: ownedTeamIds } } });
       }
 
-      // 6. Remove this user's remaining memberships in other people's projects/teams
       await tx.teamMembership.deleteMany({ where: { userId } });
       await tx.projectMembership.deleteMany({ where: { userId } });
-
-      // 7. Delete the user
       await tx.user.delete({ where: { id: userId } });
     });
 

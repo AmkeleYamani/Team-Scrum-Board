@@ -1,4 +1,5 @@
 import express from "express";
+import { Prisma } from "@prisma/client";
 import { prisma } from "../prisma";
 import { AuthRequest } from "../middleware/auth";
 
@@ -15,6 +16,15 @@ const teamInclude = {
   members: { include: { user: { select: { id: true, name: true, email: true } } } },
   projects: { include: projectInclude, orderBy: { createdAt: "desc" as const } },
 } as const;
+
+async function findUserIdsByEmails(emails: string[]): Promise<string[]> {
+  if (emails.length === 0) return [];
+  const lowerEmails = emails.map((e) => e.trim().toLowerCase());
+  const users = await prisma.$queryRaw<{ id: string }[]>`
+    SELECT id FROM "User" WHERE LOWER(email) IN (${Prisma.join(lowerEmails)})
+  `;
+  return users.map((u) => u.id);
+}
 
 // GET /api/teams
 router.get("/", async (req: AuthRequest, res) => {
@@ -35,8 +45,8 @@ router.post("/", async (req: AuthRequest, res) => {
   if (!name) return res.status(400).json({ message: "Team name is required." });
 
   const collaborators = Array.isArray(memberEmails) ? memberEmails.filter(Boolean) : [];
-  const users = await prisma.user.findMany({ where: { email: { in: collaborators } } });
-  const uniqueMemberIds = Array.from(new Set([...users.map((u) => u.id), userId]));
+  const collaboratorIds = await findUserIdsByEmails(collaborators);
+  const uniqueMemberIds = Array.from(new Set([...collaboratorIds, userId]));
 
   const team = await prisma.team.create({
     data: {
@@ -76,8 +86,8 @@ router.patch("/:teamId", async (req: AuthRequest, res) => {
   if (team.createdById !== userId) return res.status(403).json({ message: "Only the team creator can edit it." });
 
   const collaborators = Array.isArray(memberEmails) ? memberEmails.filter(Boolean) : [];
-  const users = await prisma.user.findMany({ where: { email: { in: collaborators } } });
-  const uniqueMemberIds = [...new Set([...users.map((u) => u.id), userId])];
+  const collaboratorIds = await findUserIdsByEmails(collaborators);
+  const uniqueMemberIds = [...new Set([...collaboratorIds, userId])];
 
   const updated = await prisma.$transaction(async (tx) => {
     await tx.teamMembership.deleteMany({ where: { teamId } });
@@ -103,9 +113,10 @@ router.post("/:teamId/members", async (req: AuthRequest, res) => {
     if (!team) return res.status(404).json({ message: "Team not found." });
     if (team.createdById !== userId) return res.status(403).json({ message: "Only the team creator can add members." });
 
-    const userToAdd = await prisma.user.findFirst({
-      where: { email: email.trim().toLowerCase() },
-    });
+    const result = await prisma.$queryRaw<{ id: string; name: string; email: string }[]>`
+      SELECT id, name, email FROM "User" WHERE LOWER(email) = LOWER(${email.trim()}) LIMIT 1
+    `;
+    const userToAdd = result[0] ?? null;
     if (!userToAdd) return res.status(404).json({ message: "No registered user found with that email." });
 
     const existing = await prisma.teamMembership.findFirst({ where: { teamId, userId: userToAdd.id } });
