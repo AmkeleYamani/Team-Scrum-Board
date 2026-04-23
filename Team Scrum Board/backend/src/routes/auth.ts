@@ -12,7 +12,8 @@ router.post("/register", async (req, res) => {
     return res.status(400).json({ message: "Email and password are required." });
   }
 
-  const existingUser = await prisma.user.findUnique({ where: { email } });
+  const normalizedEmail = email.trim().toLowerCase();
+  const existingUser = await prisma.user.findUnique({ where: { email: normalizedEmail } });
   if (existingUser) {
     return res.status(409).json({ message: "Email already registered." });
   }
@@ -20,8 +21,8 @@ router.post("/register", async (req, res) => {
   const hashedPassword = await bcrypt.hash(password, 10);
   const user = await prisma.user.create({
     data: {
-      name: name || email,
-      email,
+      name: name || normalizedEmail,
+      email: normalizedEmail,
       password: hashedPassword,
     },
   });
@@ -41,7 +42,7 @@ router.post("/login", async (req, res) => {
     return res.status(400).json({ message: "Email and password are required." });
   }
 
-  const user = await prisma.user.findUnique({ where: { email } });
+  const user = await prisma.user.findUnique({ where: { email: email.trim().toLowerCase() } });
   if (!user) {
     return res.status(401).json({ message: "Invalid credentials." });
   }
@@ -64,14 +65,15 @@ router.patch("/profile", authenticateToken, async (req: AuthRequest, res) => {
 
   if (!email) return res.status(400).json({ message: "Email is required." });
 
-  const existing = await prisma.user.findUnique({ where: { email } });
+  const normalizedEmail = email.trim().toLowerCase();
+  const existing = await prisma.user.findUnique({ where: { email: normalizedEmail } });
   if (existing && existing.id !== userId) {
     return res.status(409).json({ message: "Email already in use." });
   }
 
   const updated = await prisma.user.update({
     where: { id: userId },
-    data: { email, ...(name !== undefined && { name }) },
+    data: { email: normalizedEmail, ...(name !== undefined && { name }) },
     select: { id: true, name: true, email: true },
   });
 

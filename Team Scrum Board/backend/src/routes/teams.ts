@@ -98,20 +98,27 @@ router.post("/:teamId/members", async (req: AuthRequest, res) => {
 
   if (!email) return res.status(400).json({ message: "Email is required." });
 
-  const team = await prisma.team.findUnique({ where: { id: teamId } });
-  if (!team) return res.status(404).json({ message: "Team not found." });
-  if (team.createdById !== userId) return res.status(403).json({ message: "Only the team creator can add members." });
+  try {
+    const team = await prisma.team.findUnique({ where: { id: teamId } });
+    if (!team) return res.status(404).json({ message: "Team not found." });
+    if (team.createdById !== userId) return res.status(403).json({ message: "Only the team creator can add members." });
 
-  const userToAdd = await prisma.user.findUnique({ where: { email: email.trim() } });
-  if (!userToAdd) return res.status(404).json({ message: "No registered user found with that email." });
+    const userToAdd = await prisma.user.findFirst({
+      where: { email: email.trim().toLowerCase() },
+    });
+    if (!userToAdd) return res.status(404).json({ message: "No registered user found with that email." });
 
-  const existing = await prisma.teamMembership.findFirst({ where: { teamId, userId: userToAdd.id } });
-  if (existing) return res.status(409).json({ message: "User is already a team member." });
+    const existing = await prisma.teamMembership.findFirst({ where: { teamId, userId: userToAdd.id } });
+    if (existing) return res.status(409).json({ message: "User is already a team member." });
 
-  await prisma.teamMembership.create({ data: { teamId, userId: userToAdd.id } });
+    await prisma.teamMembership.create({ data: { teamId, userId: userToAdd.id } });
 
-  const updated = await prisma.team.findUnique({ where: { id: teamId }, include: teamInclude });
-  return res.json(updated);
+    const updated = await prisma.team.findUnique({ where: { id: teamId }, include: teamInclude });
+    return res.json(updated);
+  } catch (err) {
+    console.error("Add member error:", err);
+    return res.status(500).json({ message: "An unexpected error occurred. Please try again." });
+  }
 });
 
 // DELETE /api/teams/:teamId
