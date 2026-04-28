@@ -59,6 +59,19 @@ function TeamDashboard() {
     }
   }
 
+  // Remove member
+  async function handleRemoveMember(userId: string) {
+    setAddMemberError("");
+    setAddMemberSuccess("");
+    try {
+      const res = await api.delete(`/teams/${teamId}/members/${userId}`);
+      setTeam(res.data);
+      setAddMemberSuccess("Member removed successfully.");
+    } catch (err: any) {
+      setAddMemberError(err?.response?.data?.message || "Unable to remove member.");
+    }
+  }
+
   // ── Team edit ────────────────────────────────────────────────────────────
 
   function startEditTeam() {
@@ -229,8 +242,27 @@ function TeamDashboard() {
               <p className="mt-1 text-sm text-slate-500">All team members can view and manage projects in this team.</p>
               <div className="mt-4 flex flex-wrap gap-2">
                 {team.members.map((m) => (
-                  <span key={m.user.id} className="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-700">
-                    {m.user.name || m.user.email}
+                  <span
+                    key={m.user.id}
+                    className={
+                      isTeamCreator && m.user.id !== team.createdBy?.id
+                        ? "relative group"
+                        : ""
+                    }
+                  >
+                    <span className="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-700 inline-flex items-center">
+                      {m.user.name || m.user.email}
+                      {isTeamCreator && m.user.id !== team.createdBy?.id ? (
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveMember(m.user.id)}
+                          className="ml-2 opacity-0 group-hover:opacity-100 transition-opacity text-slate-400 hover:text-red-600 focus:outline-none"
+                          title="Remove member"
+                        >
+                          ×
+                        </button>
+                      ) : null}
+                    </span>
                   </span>
                 ))}
               </div>
