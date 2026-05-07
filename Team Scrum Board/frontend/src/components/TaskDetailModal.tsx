@@ -1,5 +1,5 @@
 import { ChangeEvent, FormEvent, useEffect, useRef, useState } from "react";
-import api from "../services/api";
+import api, { backendBaseUrl } from "../services/api";
 import { Attachment, Comment, ProjectMember, Task, User } from "../types";
 
 interface Props {
@@ -237,6 +237,11 @@ export default function TaskDetailModal({
   function isImageFile(filename: string) {
     const ext = filename.split(".").pop()?.toLowerCase() ?? "";
     return ["jpg", "jpeg", "png", "gif", "webp", "svg"].includes(ext);
+  }
+
+  function resolveUrl(url: string): string {
+    if (url.startsWith("http")) return url;
+    return `${backendBaseUrl}${url}`;
   }
 
   // Close on backdrop click
@@ -487,13 +492,13 @@ export default function TaskDetailModal({
                             isImageFile(att.filename) ? (
                               <a
                                 key={att.id}
-                                href={att.url}
+                                href={resolveUrl(att.url)}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="block"
                               >
                                 <img
-                                  src={att.url}
+                                  src={resolveUrl(att.url)}
                                   alt={att.filename}
                                   className="h-24 w-24 rounded-lg object-cover border border-slate-200 hover:opacity-90 transition"
                                 />
@@ -501,7 +506,7 @@ export default function TaskDetailModal({
                             ) : (
                               <a
                                 key={att.id}
-                                href={att.url}
+                                href={resolveUrl(att.url)}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600 hover:bg-slate-50"

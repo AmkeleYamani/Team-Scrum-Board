@@ -132,6 +132,28 @@ router.post("/:teamId/members", async (req: AuthRequest, res) => {
   }
 });
 
+// DELETE /api/teams/:teamId/members/:memberId — remove a single member (creator only)
+router.delete("/:teamId/members/:memberId", async (req: AuthRequest, res) => {
+  const userId = req.userId!;
+  const { teamId, memberId } = req.params;
+
+  try {
+    const team = await prisma.team.findUnique({ where: { id: teamId } });
+    if (!team) return res.status(404).json({ message: "Team not found." });
+    if (team.createdById !== userId) return res.status(403).json({ message: "Only the team creator can remove members." });
+    if (memberId === team.createdById) return res.status(400).json({ message: "Cannot remove the team creator." });
+
+    const deleted = await prisma.teamMembership.deleteMany({ where: { teamId, userId: memberId } });
+    if (deleted.count === 0) return res.status(404).json({ message: "User is not a member of this team." });
+
+    const updated = await prisma.team.findUnique({ where: { id: teamId }, include: teamInclude });
+    return res.json(updated);
+  } catch (err) {
+    console.error("Remove member error:", err);
+    return res.status(500).json({ message: "An unexpected error occurred." });
+  }
+});
+
 // DELETE /api/teams/:teamId
 router.delete("/:teamId", async (req: AuthRequest, res) => {
   const userId = req.userId!;

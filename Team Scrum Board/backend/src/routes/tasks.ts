@@ -175,6 +175,9 @@ router.post("/:taskId/comments", upload.array("files", 10), async (req: AuthRequ
 
   const files = (req.files as Express.Multer.File[]) || [];
 
+  const railwayDomain = process.env.RAILWAY_PUBLIC_DOMAIN;
+  const baseUrl = railwayDomain ? `https://${railwayDomain}` : "";
+
   const comment = await prisma.comment.create({
     data: {
       content: content.trim(),
@@ -183,7 +186,7 @@ router.post("/:taskId/comments", upload.array("files", 10), async (req: AuthRequ
       attachments: {
         create: files.map((file) => ({
           filename: file.originalname,
-          url: `/uploads/${file.filename}`,
+          url: `${baseUrl}/uploads/${file.filename}`,
         })),
       },
       mentions: {
