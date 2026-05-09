@@ -2,11 +2,14 @@ import { FormEvent, useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import api from "../services/api";
 import { Project, Team } from "../types";
+import AnalyticsDashboard from "./AnalyticsDashboard";
+import Notes from "../components/Notes";
 
 function Dashboard() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const activeTab = searchParams.get("tab") === "teams" ? "teams" : "projects";
+  const tabParam = searchParams.get("tab");
+  const activeTab = tabParam === "teams" ? "teams" : tabParam === "analytics" ? "analytics" : tabParam === "notes" ? "notes" : "projects";
 
   // Personal projects state
   const [projects, setProjects] = useState<Project[]>([]);
@@ -197,7 +200,7 @@ function Dashboard() {
       ) : null}
 
       {/* Tabs */}
-      <div className="flex gap-1 rounded-xl bg-slate-100 p-1 w-fit">
+      <div className="flex flex-wrap gap-1 rounded-xl bg-slate-100 p-1 w-fit">
         <button
           onClick={() => setSearchParams({})}
           className={`rounded-lg px-5 py-2 text-sm font-medium transition ${activeTab === "projects" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
@@ -209,6 +212,18 @@ function Dashboard() {
           className={`rounded-lg px-5 py-2 text-sm font-medium transition ${activeTab === "teams" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
         >
           My Team Projects
+        </button>
+        <button
+          onClick={() => setSearchParams({ tab: "analytics" })}
+          className={`rounded-lg px-5 py-2 text-sm font-medium transition ${activeTab === "analytics" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
+        >
+          Analytics
+        </button>
+        <button
+          onClick={() => setSearchParams({ tab: "notes" })}
+          className={`rounded-lg px-5 py-2 text-sm font-medium transition ${activeTab === "notes" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
+        >
+          Notes
         </button>
       </div>
 
@@ -293,6 +308,12 @@ function Dashboard() {
           </section>
         </>
       ) : null}
+
+      {/* ── ANALYTICS TAB ───────────────────────────────────────────────── */}
+      {activeTab === "analytics" ? <AnalyticsDashboard /> : null}
+
+      {/* ── NOTES TAB ───────────────────────────────────────────────────── */}
+      {activeTab === "notes" ? <Notes /> : null}
 
       {/* ── MY TEAMS TAB ────────────────────────────────────────────────── */}
       {activeTab === "teams" ? (

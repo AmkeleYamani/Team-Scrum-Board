@@ -11,7 +11,16 @@ export type Task = {
   status: "TODO" | "IN_PROGRESS" | "PAUSE" | "TEST" | "DONE";
   priority: "LOW" | "MEDIUM" | "HIGH";
   dueDate?: string | null;
+  startDate?: string | null;
   assignedTo?: User | null;
+};
+
+export type Note = {
+  id: string;
+  title: string;
+  content: string;
+  createdAt: string;
+  updatedAt: string;
 };
 
 export type ProjectMember = {

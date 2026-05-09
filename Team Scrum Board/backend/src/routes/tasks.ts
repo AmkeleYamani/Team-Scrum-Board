@@ -4,6 +4,7 @@ import path from "path";
 import fs from "fs";
 import { prisma } from "../prisma";
 import { AuthRequest } from "../middleware/auth";
+import { sendOnce } from "../emailHelper";
 
 const router = express.Router();
 
@@ -22,7 +23,6 @@ const storage = multer.diskStorage({
 
 const upload = multer({ storage });
 
-// Returns true if the user is a direct project member OR a team member of the project's team
 async function verifyProjectAccess(userId: string, projectId: string): Promise<boolean> {
   const project = await prisma.project.findUnique({
     where: { id: projectId },
@@ -40,16 +40,14 @@ async function verifyProjectAccess(userId: string, projectId: string): Promise<b
   return false;
 }
 
-// Returns true if the given user can be assigned to a task in this project
 async function verifyAssigneeInProject(assigneeId: string, projectId: string): Promise<boolean> {
   return verifyProjectAccess(assigneeId, projectId);
 }
 
-// Create task
 router.post("/projects/:projectId/tasks", async (req: AuthRequest, res) => {
   const userId = req.userId!;
   const { projectId } = req.params;
-  const { title, description, status, priority, dueDate, assignedToId } = req.body;
+  const { title, description, status, priority, dueDate, startDate, assignedToId } = req.body;
 
   if (!title || !status || !priority) {
     return res.status(400).json({ message: "Title, status and priority are required." });
@@ -70,20 +68,34 @@ router.post("/projects/:projectId/tasks", async (req: AuthRequest, res) => {
       status,
       priority,
       dueDate: dueDate ? new Date(dueDate) : null,
+      startDate: startDate ? new Date(startDate) : null,
       projectId,
       assignedToId: assignedToId || null,
     },
     include: { assignedTo: { select: { id: true, name: true, email: true } } },
   });
 
+  if (task.assignedToId) {
+    const assignedUser = await prisma.user.findUnique({ where: { id: task.assignedToId }, select: { email: true } });
+    if (assignedUser?.email) {
+      const proj = await prisma.project.findUnique({ where: { id: projectId }, select: { name: true } });
+      sendOnce(
+        "task_assigned",
+        assignedUser.email,
+        task.id,
+        `You've been assigned a task: ${task.title}`,
+        `<p>You have been assigned the task <strong>${task.title}</strong> in project <strong>${proj?.name}</strong>. Priority: ${task.priority}. Due: ${task.dueDate ? new Date(task.dueDate).toLocaleDateString() : "No due date"}.</p>`
+      );
+    }
+  }
+
   return res.status(201).json(task);
 });
 
-// Update task
 router.patch("/:taskId", async (req: AuthRequest, res) => {
   const userId = req.userId!;
   const { taskId } = req.params;
-  const { title, description, status, priority, dueDate, assignedToId } = req.body;
+  const { title, description, status, priority, dueDate, startDate, assignedToId } = req.body;
 
   const task = await prisma.task.findUnique({ where: { id: taskId } });
   if (!task) return res.status(404).json({ message: "Task not found." });
@@ -104,6 +116,7 @@ router.patch("/:taskId", async (req: AuthRequest, res) => {
       status,
       priority,
       dueDate: dueDate === null ? null : dueDate ? new Date(dueDate) : undefined,
+      startDate: startDate === null ? null : startDate ? new Date(startDate) : undefined,
       assignedToId: assignedToId === undefined ? undefined : assignedToId || null,
     },
     include: { assignedTo: { select: { id: true, name: true, email: true } } },
@@ -112,7 +125,6 @@ router.patch("/:taskId", async (req: AuthRequest, res) => {
   return res.json(updated);
 });
 
-// Delete task
 router.delete("/:taskId", async (req: AuthRequest, res) => {
   const userId = req.userId!;
   const { taskId } = req.params;
@@ -127,7 +139,6 @@ router.delete("/:taskId", async (req: AuthRequest, res) => {
   return res.status(204).send();
 });
 
-// Get comments for a task
 router.get("/:taskId/comments", async (req: AuthRequest, res) => {
   const userId = req.userId!;
   const { taskId } = req.params;
@@ -151,7 +162,6 @@ router.get("/:taskId/comments", async (req: AuthRequest, res) => {
   return res.json(comments);
 });
 
-// Add comment to a task (with optional file attachments)
 router.post("/:taskId/comments", upload.array("files", 10), async (req: AuthRequest, res) => {
   const userId = req.userId!;
   const { taskId } = req.params;
@@ -200,10 +210,22 @@ router.post("/:taskId/comments", upload.array("files", 10), async (req: AuthRequ
     },
   });
 
+  for (const uid of mentionIds) {
+    const mentionedUser = await prisma.user.findUnique({ where: { id: uid }, select: { email: true, name: true } });
+    if (mentionedUser?.email) {
+      sendOnce(
+        "mention",
+        mentionedUser.email,
+        comment.id,
+        `You were mentioned in a comment`,
+        `<p>${comment.author?.name || "Someone"} mentioned you in a comment on task <strong>${task.title}</strong>.</p><p>"${content.trim()}"</p>`
+      );
+    }
+  }
+
   return res.status(201).json(comment);
 });
 
-// Delete a comment (author only)
 router.delete("/comments/:commentId", async (req: AuthRequest, res) => {
   const userId = req.userId!;
   const { commentId } = req.params;

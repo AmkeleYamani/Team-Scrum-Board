@@ -18,6 +18,7 @@ model User {
   commentMentions    CommentMention[]
   teamsCreated       Team[]              @relation("TeamsCreated")
   teamMemberships    TeamMembership[]
+  notes              Note[]
   createdAt          DateTime            @default(now())
 }
 
@@ -74,6 +75,7 @@ model Task {
   status       String
   priority     String
   dueDate      DateTime?
+  startDate    DateTime?
   assignedTo   User?     @relation("AssignedTasks", fields: [assignedToId], references: [id])
   assignedToId String?
   project      Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
@@ -111,4 +113,24 @@ model CommentMention {
   commentId String
   user      User    @relation(fields: [userId], references: [id])
   userId    String
+}
+
+model Note {
+  id        String   @id @default(cuid())
+  title     String   @default("")
+  content   String   @default("")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model EmailLog {
+  id             String   @id @default(cuid())
+  type           String
+  recipientEmail String
+  referenceId    String
+  sentAt         DateTime @default(now())
+
+  @@unique([type, recipientEmail, referenceId])
 }

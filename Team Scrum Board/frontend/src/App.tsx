@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from "react";
-import { Navigate, Route, Routes, useNavigate } from "react-router-dom";
+import { Navigate, NavLink, Route, Routes, useNavigate } from "react-router-dom";
 import Dashboard from "./pages/Dashboard";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import Board from "./pages/Board";
 import TeamDashboard from "./pages/TeamDashboard";
+import CalendarView from "./pages/CalendarView";
+import TimelineView from "./pages/TimelineView";
 import api from "./services/api";
 
 function PrivateRoute({ children }: { children: JSX.Element }) {
@@ -283,11 +285,30 @@ function App() {
       ) : null}
 
       <header className="border-b border-slate-200 bg-white px-6 py-4 shadow-sm">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4">
+        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3">
           <div>
             <h1 className="text-lg font-semibold text-slate-900">Team Scrum Board</h1>
             <p className="text-sm text-slate-500">Manage projects, tasks, and team collaboration.</p>
           </div>
+          {token ? (
+            <nav className="flex flex-wrap gap-1">
+              {[
+                { to: "/dashboard", label: "Projects" },
+                { to: "/calendar", label: "Calendar" },
+                { to: "/timeline", label: "Timeline" },
+              ].map(({ to, label }) => (
+                <NavLink
+                  key={to}
+                  to={to}
+                  className={({ isActive }) =>
+                    `rounded-lg px-3 py-1.5 text-sm font-medium transition ${isActive ? "bg-slate-100 text-slate-900" : "text-slate-500 hover:text-slate-700"}`
+                  }
+                >
+                  {label}
+                </NavLink>
+              ))}
+            </nav>
+          ) : null}
 
           {token ? (
             <div className="relative" ref={dropdownRef}>
@@ -369,6 +390,8 @@ function App() {
           <Route path="/dashboard" element={<PrivateRoute><Dashboard /></PrivateRoute>} />
           <Route path="/project/:projectId" element={<PrivateRoute><Board /></PrivateRoute>} />
           <Route path="/teams/:teamId" element={<PrivateRoute><TeamDashboard /></PrivateRoute>} />
+          <Route path="/calendar" element={<PrivateRoute><CalendarView /></PrivateRoute>} />
+          <Route path="/timeline" element={<PrivateRoute><TimelineView /></PrivateRoute>} />
           <Route path="/" element={token ? <Navigate to="/dashboard" replace /> : <Navigate to="/login" replace />} />
         </Routes>
       </main>
