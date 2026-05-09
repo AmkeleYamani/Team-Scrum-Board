@@ -79,7 +79,7 @@ export default function AnalyticsDashboard() {
           <h3 className="mb-4 text-sm font-semibold text-slate-900">Tasks by Status</h3>
           <ResponsiveContainer width="100%" height={220}>
             <PieChart>
-              <Pie data={statusData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} label={({ name, percent }) => `${name} ${Math.round(percent * 100)}%`}>
+              <Pie data={statusData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} label={({ name, percent }) => `${name} ${Math.round((percent ?? 0) * 100)}%`}>
                 {statusData.map((entry) => (
                   <Cell key={entry.name} fill={STATUS_COLORS[entry.name] ?? "#94a3b8"} />
                 ))}
@@ -95,7 +95,7 @@ export default function AnalyticsDashboard() {
           <h3 className="mb-4 text-sm font-semibold text-slate-900">Tasks by Priority</h3>
           <ResponsiveContainer width="100%" height={220}>
             <PieChart>
-              <Pie data={priorityData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} label={({ name, percent }) => `${name} ${Math.round(percent * 100)}%`}>
+              <Pie data={priorityData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} label={({ name, percent }) => `${name} ${Math.round((percent ?? 0) * 100)}%`}>
                 {priorityData.map((entry) => (
                   <Cell key={entry.name} fill={PRIORITY_COLORS[entry.name] ?? "#94a3b8"} />
                 ))}
