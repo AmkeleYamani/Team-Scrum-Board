@@ -2,6 +2,8 @@ import express from "express";
 import { Prisma } from "@prisma/client";
 import { prisma } from "../prisma";
 import { AuthRequest } from "../middleware/auth";
+import { sendOnce } from "../emailHelper";
+import { teamAddedEmail } from "../emailTemplates";
 
 const router = express.Router();
 
@@ -125,6 +127,13 @@ router.post("/:teamId/members", async (req: AuthRequest, res) => {
     await prisma.teamMembership.create({ data: { teamId, userId: userToAdd.id } });
 
     const updated = await prisma.team.findUnique({ where: { id: teamId }, include: teamInclude });
+
+    // Notify the newly added member
+    const adder = await prisma.user.findUnique({ where: { id: userId }, select: { name: true, email: true } });
+    const adderName = adder?.name || adder?.email || "Someone";
+    const { subject, html } = teamAddedEmail(team.name, adderName);
+    sendOnce("team_added", userToAdd.email, `${userToAdd.id}-${teamId}`, subject, html);
+
     return res.json(updated);
   } catch (err) {
     console.error("Add member error:", err);

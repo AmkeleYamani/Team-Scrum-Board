@@ -2,6 +2,8 @@ import express from "express";
 import { Prisma } from "@prisma/client";
 import { prisma } from "../prisma";
 import { AuthRequest } from "../middleware/auth";
+import { sendOnce } from "../emailHelper";
+import { projectAddedEmail } from "../emailTemplates";
 
 const router = express.Router();
 
@@ -54,6 +56,18 @@ router.post("/", async (req: AuthRequest, res) => {
     },
     include: projectInclude,
   });
+
+  // Notify collaborators (everyone except the creator)
+  const creator = await prisma.user.findUnique({ where: { id: userId }, select: { name: true, email: true } });
+  const creatorName = creator?.name || creator?.email || "Someone";
+  for (const memberId of collaboratorIds.filter((id) => id !== userId)) {
+    const user = await prisma.user.findUnique({ where: { id: memberId }, select: { email: true } });
+    if (user?.email) {
+      const { subject, html } = projectAddedEmail(project.name, creatorName);
+      sendOnce("project_added", user.email, `${memberId}-${project.id}`, subject, html);
+    }
+  }
+
   return res.status(201).json(project);
 });
 
@@ -110,6 +124,10 @@ router.patch("/:projectId", async (req: AuthRequest, res) => {
   const collaboratorIds = await findUserIdsByEmails(collaborators);
   const uniqueMemberIds = Array.from(new Set([...collaboratorIds, userId]));
 
+  // Capture existing members before we wipe them so we can detect new additions
+  const existingMemberships = await prisma.projectMembership.findMany({ where: { projectId }, select: { userId: true } });
+  const existingMemberIds = new Set(existingMemberships.map((m) => m.userId));
+
   await prisma.projectMembership.deleteMany({ where: { projectId } });
 
   const updated = await prisma.project.update({
@@ -121,6 +139,18 @@ router.patch("/:projectId", async (req: AuthRequest, res) => {
     },
     include: projectInclude,
   });
+
+  // Notify members who are newly added (weren't in the project before and aren't the editor)
+  const editor = await prisma.user.findUnique({ where: { id: userId }, select: { name: true, email: true } });
+  const editorName = editor?.name || editor?.email || "Someone";
+  for (const memberId of uniqueMemberIds.filter((id) => id !== userId && !existingMemberIds.has(id))) {
+    const user = await prisma.user.findUnique({ where: { id: memberId }, select: { email: true } });
+    if (user?.email) {
+      const { subject, html } = projectAddedEmail(updated.name, editorName);
+      sendOnce("project_added", user.email, `${memberId}-${projectId}`, subject, html);
+    }
+  }
+
   return res.json(updated);
 });
 

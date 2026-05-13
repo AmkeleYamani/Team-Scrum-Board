@@ -5,6 +5,7 @@ import fs from "fs";
 import { prisma } from "../prisma";
 import { AuthRequest } from "../middleware/auth";
 import { sendOnce } from "../emailHelper";
+import { taskAssignedEmail, taskReassignedEmail, mentionEmail } from "../emailTemplates";
 
 const router = express.Router();
 
@@ -79,13 +80,8 @@ router.post("/projects/:projectId/tasks", async (req: AuthRequest, res) => {
     const assignedUser = await prisma.user.findUnique({ where: { id: task.assignedToId }, select: { email: true } });
     if (assignedUser?.email) {
       const proj = await prisma.project.findUnique({ where: { id: projectId }, select: { name: true } });
-      sendOnce(
-        "task_assigned",
-        assignedUser.email,
-        task.id,
-        `You've been assigned a task: ${task.title}`,
-        `<p>You have been assigned the task <strong>${task.title}</strong> in project <strong>${proj?.name}</strong>. Priority: ${task.priority}. Due: ${task.dueDate ? new Date(task.dueDate).toLocaleDateString() : "No due date"}.</p>`
-      );
+      const { subject, html } = taskAssignedEmail(task.title, proj?.name ?? projectId, task.priority, task.dueDate ? task.dueDate.toISOString() : null);
+      sendOnce("task_assigned", assignedUser.email, task.id, subject, html);
     }
   }
 
@@ -108,6 +104,8 @@ router.patch("/:taskId", async (req: AuthRequest, res) => {
     if (!assigneeOk) return res.status(400).json({ message: "Assigned user must belong to the project or team." });
   }
 
+  const previousAssigneeId = task.assignedToId;
+
   const updated = await prisma.task.update({
     where: { id: taskId },
     data: {
@@ -121,6 +119,19 @@ router.patch("/:taskId", async (req: AuthRequest, res) => {
     },
     include: { assignedTo: { select: { id: true, name: true, email: true } } },
   });
+
+  // Notify new assignee when task is reassigned to a different person
+  const newAssigneeId = updated.assignedToId;
+  if (newAssigneeId && newAssigneeId !== previousAssigneeId && updated.assignedTo?.email) {
+    const proj = await prisma.project.findUnique({ where: { id: task.projectId }, select: { name: true } });
+    const { subject, html } = taskReassignedEmail(
+      updated.title,
+      proj?.name ?? task.projectId,
+      updated.priority,
+      updated.dueDate ? updated.dueDate.toISOString() : null
+    );
+    sendOnce("task_assigned", updated.assignedTo.email, updated.id, subject, html);
+  }
 
   return res.json(updated);
 });
@@ -213,13 +224,9 @@ router.post("/:taskId/comments", upload.array("files", 10), async (req: AuthRequ
   for (const uid of mentionIds) {
     const mentionedUser = await prisma.user.findUnique({ where: { id: uid }, select: { email: true, name: true } });
     if (mentionedUser?.email) {
-      sendOnce(
-        "mention",
-        mentionedUser.email,
-        comment.id,
-        `You were mentioned in a comment`,
-        `<p>${comment.author?.name || "Someone"} mentioned you in a comment on task <strong>${task.title}</strong>.</p><p>"${content.trim()}"</p>`
-      );
+      const authorName = comment.author?.name || comment.author?.email || "Someone";
+      const { subject, html } = mentionEmail(task.title, authorName, content.trim());
+      sendOnce("mention", mentionedUser.email, comment.id, subject, html);
     }
   }
 

@@ -10,8 +10,8 @@ const transporter = nodemailer.createTransport({
   },
 });
 
-export async function sendEmail(to: string, subject: string, html: string): Promise<void> {
-  if (!process.env.SMTP_HOST || !process.env.SMTP_USER) return;
+export async function sendEmail(to: string, subject: string, html: string): Promise<boolean> {
+  if (!process.env.SMTP_HOST || !process.env.SMTP_USER) return false;
   try {
     await transporter.sendMail({
       from: process.env.SMTP_FROM || process.env.SMTP_USER,
@@ -19,7 +19,9 @@ export async function sendEmail(to: string, subject: string, html: string): Prom
       subject,
       html,
     });
+    return true;
   } catch (e) {
     console.error("Email send error:", e);
+    return false;
   }
 }
